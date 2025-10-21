@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+/* import { Controller, Get, Query } from '@nestjs/common';
 import { PaginationDto } from '../dto/pagination.dto';
 import { Pagination } from '../decorators/pagination.decorator';
 import { PaginationOptions } from '../dto/pagination.dto';
@@ -106,3 +106,4 @@ export class PaginationExampleController {
     );
   }
 }
+ */

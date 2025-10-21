@@ -2,8 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ScientistService } from './scientist.service';
 import { ScientistSearchDto } from './dto/scientist-search.dto';
 import { BasePaginatedController } from '../../common/controllers/base-paginated.controller';
-import { PaginatedResponse } from 'shared';
-import { ScientistSearchResult } from './types/pubmed.types';
+import { PaginatedResponse, ScientistSearchResult } from 'shared';
 
 @Controller('scientists')
 export class ScientistController extends BasePaginatedController {
@@ -12,8 +11,8 @@ export class ScientistController extends BasePaginatedController {
   }
 
   /**
-   * Search scientists by keywords
-   * GET /scientists/search?keywords=Boston&page=1&limit=20
+   * Search scientists by keywords and optionally by affiliation
+   * GET /scientists/search?keywords=Boston&affiliation=Harvard&page=1&limit=20
    */
   @Get('search')
   async searchScientists(
@@ -21,7 +20,12 @@ export class ScientistController extends BasePaginatedController {
   ): Promise<PaginatedResponse<ScientistSearchResult>> {
     const options = this.getPaginationOptions(searchDto);
     return await this.scientistService.searchScientists(
-      searchDto.keywords,
+      {
+        keywords: searchDto.keywords,
+        keywordsArray: searchDto.keywordsArray,
+        affiliation: searchDto.affiliation,
+        affiliationArray: searchDto.affiliationArray,
+      },
       options
     );
   }

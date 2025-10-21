@@ -1,46 +1,73 @@
-export interface Scientist {
-  id: string;
-  name: string;
-  email: string;
-  title: string;
-  specialization: string[];
-  institution: string;
-  city: string;
-  country: string;
-  bio: string;
-  profileImage?: string;
-  researchInterests: string[];
-  experience: number; // years
-  publications: number;
-  rating: number;
-  isAvailable: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface City {
-  id: string;
-  name: string;
-  country: string;
-  region: string;
-  scientistCount: number;
-}
-
-export interface SearchFilters {
-  city?: string;
-  specialization?: string[];
-  experience?: {
-    min: number;
-    max: number;
+// PubMed eSearch API response types
+export interface PubMedESearchResponse {
+  header: {
+    type: string;
+    version: string;
   };
-  rating?: number;
-  isAvailable?: boolean;
-  researchInterests?: string[];
+  esearchresult: {
+    count: string;
+    retmax: string;
+    retstart: string;
+    idlist: string[];
+    translationset: any[];
+    querytranslation: string;
+  };
 }
 
-export interface ScientistSearchRequest {
-  query?: string;
-  filters?: SearchFilters;
-  page?: number;
-  limit?: number;
+// PubMed eFetch API response types (converted from XML)
+export interface PubMedArticle {
+  pmid: string;
+  title: string;
+  abstract?: string;
+  authors: Author[];
+  journal: Journal;
+  publicationDate: PublicationDate;
+  doi?: string;
+  language: string;
+  publicationTypes: string[];
+}
+
+export interface Author {
+  lastName: string;
+  foreName: string;
+  initials: string;
+  orcid?: string;
+  affiliation: string;
+}
+
+export interface Journal {
+  title: string;
+  isoAbbreviation: string;
+  issn?: string;
+  country: string;
+}
+
+export interface PublicationDate {
+  year: number;
+  month: number;
+  day: number;
+}
+
+export interface PubMedEFetchResponse {
+  articles: PubMedArticle[];
+}
+
+// Search parameters
+export interface SearchArticleParams {
+  keywords: string;
+  retmax?: number;
+  retstart?: number;
+}
+
+export interface SearchAuthorsParams {
+  keywords: string;
+  retmax?: number;
+  retstart?: number;
+}
+
+// Response DTOs
+export interface ScientistSearchResult {
+  name: string;
+  affiliation: string;
+  orcid?: string;
 }

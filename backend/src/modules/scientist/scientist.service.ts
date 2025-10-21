@@ -3,8 +3,8 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import * as xml2js from 'xml2js';
 import { PaginationOptions } from '../../common/dto/pagination.dto';
-import { PaginatedResponse } from 'shared';
 import {
+  PaginatedResponse,
   PubMedESearchResponse,
   PubMedEFetchResponse,
   PubMedArticle,
@@ -14,7 +14,14 @@ import {
   Author,
   Journal,
   PublicationDate,
-} from './types/pubmed.types';
+} from 'shared';
+
+interface ScientistSearchParams {
+  keywords?: string;
+  keywordsArray?: string[];
+  affiliation?: string;
+  affiliationArray?: string[];
+}
 
 @Injectable()
 export class ScientistService {
@@ -24,24 +31,82 @@ export class ScientistService {
   constructor(private readonly httpService: HttpService) {}
 
   /**
-   * Private method to search for article IDs using PubMed eSearch API
+   * Private method to search for article IDs using PubMed eSearch API with Boolean operators
+   * Supports multiple keywords and affiliations with OR operators
    */
   private async searchArticleIds(
-    params: SearchArticleParams
+    params: SearchArticleParams & {
+      affiliation?: string;
+      keywordsArray?: string[];
+      affiliationArray?: string[];
+    }
   ): Promise<string[]> {
     try {
-      const { keywords, retmax = 20, retstart = 0 } = params;
+      const {
+        keywords,
+        keywordsArray,
+        affiliation,
+        affiliationArray,
+        retmax = 20,
+        retstart = 0,
+      } = params;
 
       const url = `${this.baseUrl}/esearch.fcgi`;
+
+      // Build search term with Boolean operators
+      let searchTerm = '';
+
+      // Combine all keywords (single and array)
+      const allKeywords = [
+        ...(keywords ? [keywords] : []),
+        ...(keywordsArray || []),
+      ].filter(Boolean);
+
+      // Combine all affiliations (single and array)
+      const allAffiliations = [
+        ...(affiliation ? [affiliation] : []),
+        ...(affiliationArray || []),
+      ].filter(Boolean);
+
+      if (allKeywords.length > 0 && allAffiliations.length > 0) {
+        // Combine keywords with affiliations using AND operator
+        const keywordsTerm =
+          allKeywords.length === 1
+            ? allKeywords[0]
+            : `(${allKeywords.join(' OR ')})`;
+
+        const affiliationTerm =
+          allAffiliations.length === 1
+            ? `${allAffiliations[0]}[AD]`
+            : `(${allAffiliations.map((aff) => `${aff}[AD]`).join(' OR ')})`;
+
+        searchTerm = `(${keywordsTerm}) AND (${affiliationTerm})`;
+      } else if (allKeywords.length > 0) {
+        // Just keywords search
+        searchTerm =
+          allKeywords.length === 1
+            ? allKeywords[0]
+            : `(${allKeywords.join(' OR ')})`;
+      } else if (allAffiliations.length > 0) {
+        // Just affiliation search in author address field
+        searchTerm =
+          allAffiliations.length === 1
+            ? `${allAffiliations[0]}[AD]`
+            : `(${allAffiliations.map((aff) => `${aff}[AD]`).join(' OR ')})`;
+      } else {
+        // No search terms provided
+        searchTerm = '';
+      }
+
       const searchParams = new URLSearchParams({
         db: 'pubmed',
-        term: keywords,
+        term: searchTerm,
         retmax: retmax.toString(),
         retstart: retstart.toString(),
         retmode: 'json',
       });
 
-      this.logger.log(`Searching for articles with keywords: ${keywords}`);
+      this.logger.log(`Searching for articles with term: ${searchTerm}`);
 
       const response = await firstValueFrom(
         this.httpService.get<PubMedESearchResponse>(`${url}?${searchParams}`)
@@ -62,7 +127,13 @@ export class ScientistService {
   /**
    * Public method to search for articles and get detailed information
    */
-  async searchArticles(params: SearchArticleParams): Promise<PubMedArticle[]> {
+  async searchArticles(
+    params: SearchArticleParams & {
+      affiliation?: string;
+      keywordsArray?: string[];
+      affiliationArray?: string[];
+    }
+  ): Promise<PubMedArticle[]> {
     try {
       const articleIds = await this.searchArticleIds(params);
 
@@ -262,10 +333,14 @@ export class ScientistService {
   }
 
   /**
-   * Abstract method to get authors by keywords
+   * Abstract method to get authors by keywords and optionally affiliation
    */
   async searchAuthors(
-    params: SearchAuthorsParams
+    params: SearchAuthorsParams & {
+      affiliation?: string;
+      keywordsArray?: string[];
+      affiliationArray?: string[];
+    }
   ): Promise<ScientistSearchResult[]> {
     try {
       const articles = await this.searchArticles(params);
@@ -299,19 +374,29 @@ export class ScientistService {
   }
 
   /**
-   * Search scientists by keywords with pagination
+   * Search scientists by keywords and optionally by affiliation with pagination
+   * Uses NCBI E-utilities Boolean operators for efficient server-side filtering
    */
   async searchScientists(
-    keywords: string,
+    params: ScientistSearchParams,
     options: PaginationOptions
   ): Promise<PaginatedResponse<ScientistSearchResult>> {
     try {
+      const { keywords, affiliation } = params;
       const { page, limit } = options;
       const retmax = limit;
       const retstart = (page - 1) * limit;
 
+      this.logger.log(
+        `Searching scientists with keywords: ${keywords || 'none'}${affiliation ? ` and affiliation: ${affiliation}` : ''}`
+      );
+
+      // Use the Boolean operator approach for efficient server-side filtering
       const scientists = await this.searchAuthors({
-        keywords,
+        keywords: keywords || '',
+        keywordsArray: params.keywordsArray,
+        affiliation,
+        affiliationArray: params.affiliationArray,
         retmax,
         retstart,
       });
@@ -324,6 +409,10 @@ export class ScientistService {
         scientists.length === limit
           ? (page - 1) * limit + scientists.length + 1
           : (page - 1) * limit + scientists.length;
+
+      this.logger.log(
+        `Returning ${scientists.length} scientists for page ${page} (estimated total: ${total})`
+      );
 
       return {
         data: scientists,

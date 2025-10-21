@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_PASSWORD=WOojklqdmL1
+      - POSTGRES_USER=dbuser
+      - POSTGRES_DB=codex
+  mailhog:
+    image: mailhog/mailhog
+    logging:
+      driver: 'none' # disable saving logs
+    environment:
+      MH_AUTH_FILE: /mailhog.auth
+    volumes:
+      - ./mailhog.auth:/mailhog.auth:ro
+    ports:
+      - 1025:1025 # smtp server
+      - 8025:8025 # web ui

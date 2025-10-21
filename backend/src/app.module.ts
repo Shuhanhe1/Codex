@@ -1,9 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
-import { PrismaModule } from './common/prisma/prisma.module';
-import { UserModule } from './modules/user/user.module';
-import { AuthModule } from './modules/auth/auth.module';
+//import { PrismaModule } from './common/prisma/prisma.module';
 import { ScientistModule } from './modules/scientist/scientist.module';
 
 @Module({
@@ -12,9 +10,7 @@ import { ScientistModule } from './modules/scientist/scientist.module';
       isGlobal: true,
     }),
     HttpModule,
-    PrismaModule,
-    UserModule,
-    AuthModule,
+    // PrismaModule,
     ScientistModule,
   ],
 })
