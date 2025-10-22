@@ -12,7 +12,7 @@ export class ScientistController extends BasePaginatedController {
 
   /**
    * Search scientists by keywords and optionally by affiliation
-   * GET /scientists/search?keywords=Boston&affiliation=Harvard&page=1&limit=20
+   * GET /scientists/search?keywords[]=Cancer&affiliations[]=Harvard&page=1&limit=20
    */
   @Get('search')
   async searchScientists(
@@ -22,9 +22,7 @@ export class ScientistController extends BasePaginatedController {
     return await this.scientistService.searchScientists(
       {
         keywords: searchDto.keywords,
-        keywordsArray: searchDto.keywordsArray,
-        affiliation: searchDto.affiliation,
-        affiliationArray: searchDto.affiliationArray,
+        affiliations: searchDto.affiliations,
       },
       options
     );

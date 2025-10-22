@@ -14,7 +14,7 @@ export class ScientistUsageExample {
   async searchScientistsInBoston() {
     try {
       const result = await this.scientistService.searchScientists(
-        'Boston[AD]', // Affiliation field search
+        { affiliations: ['Boston'] }, // Affiliation field search
         { page: 1, limit: 10, skip: 0, sortOrder: 'desc' } // PaginationOptions
       );
 
@@ -44,7 +44,7 @@ export class ScientistUsageExample {
   async searchMachineLearningArticles() {
     try {
       const articles = await this.scientistService.searchArticles({
-        keywords: 'machine learning',
+        keywords: ['machine learning'],
         retmax: 5,
       });
 
@@ -72,7 +72,7 @@ export class ScientistUsageExample {
   async searchAuthorsByField() {
     try {
       const authors = await this.scientistService.searchAuthors({
-        keywords: 'cancer research',
+        keywords: ['cancer research'],
         retmax: 10,
       });
 

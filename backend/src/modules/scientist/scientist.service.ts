@@ -17,10 +17,8 @@ import {
 } from 'shared';
 
 interface ScientistSearchParams {
-  keywords?: string;
-  keywordsArray?: string[];
-  affiliation?: string;
-  affiliationArray?: string[];
+  keywords?: string[];
+  affiliations?: string[];
 }
 
 @Injectable()
@@ -35,68 +33,37 @@ export class ScientistService {
    * Supports multiple keywords and affiliations with OR operators
    */
   private async searchArticleIds(
-    params: SearchArticleParams & {
-      affiliation?: string;
-      keywordsArray?: string[];
-      affiliationArray?: string[];
-    }
+    params: SearchArticleParams
   ): Promise<string[]> {
     try {
-      const {
-        keywords,
-        keywordsArray,
-        affiliation,
-        affiliationArray,
-        retmax = 20,
-        retstart = 0,
-      } = params;
+      const { keywords, affiliations, retmax = 20, retstart = 0 } = params;
 
       const url = `${this.baseUrl}/esearch.fcgi`;
 
       // Build search term with Boolean operators
       let searchTerm = '';
 
-      // Combine all keywords (single and array)
-      const allKeywords = [
-        ...(keywords ? [keywords] : []),
-        ...(keywordsArray || []),
-      ].filter(Boolean);
-
-      // Combine all affiliations (single and array)
-      const allAffiliations = [
-        ...(affiliation ? [affiliation] : []),
-        ...(affiliationArray || []),
-      ].filter(Boolean);
+      // Filter out empty values
+      const allKeywords = (keywords || []).filter(Boolean);
+      const allAffiliations = (affiliations || []).filter(Boolean);
 
       if (allKeywords.length > 0 && allAffiliations.length > 0) {
         // Combine keywords with affiliations using AND operator
-        const keywordsTerm =
-          allKeywords.length === 1
-            ? allKeywords[0]
-            : `(${allKeywords.join(' OR ')})`;
-
-        const affiliationTerm =
-          allAffiliations.length === 1
-            ? `${allAffiliations[0]}[AD]`
-            : `(${allAffiliations.map((aff) => `${aff}[AD]`).join(' OR ')})`;
-
+        const keywordsTerm = `(${allKeywords.join(' OR ')})`;
+        const affiliationTerm = `(${allAffiliations.map((aff) => `${aff}[AD]`).join(' OR ')})`;
         searchTerm = `(${keywordsTerm}) AND (${affiliationTerm})`;
       } else if (allKeywords.length > 0) {
         // Just keywords search
-        searchTerm =
-          allKeywords.length === 1
-            ? allKeywords[0]
-            : `(${allKeywords.join(' OR ')})`;
+        searchTerm = `(${allKeywords.join(' OR ')})`;
       } else if (allAffiliations.length > 0) {
         // Just affiliation search in author address field
-        searchTerm =
-          allAffiliations.length === 1
-            ? `${allAffiliations[0]}[AD]`
-            : `(${allAffiliations.map((aff) => `${aff}[AD]`).join(' OR ')})`;
+        searchTerm = `(${allAffiliations.map((aff) => `${aff}[AD]`).join(' OR ')})`;
       } else {
         // No search terms provided
         searchTerm = '';
       }
+
+      searchTerm += '+AND+medline[sb]';
 
       const searchParams = new URLSearchParams({
         db: 'pubmed',
@@ -108,6 +75,7 @@ export class ScientistService {
 
       this.logger.log(`Searching for articles with term: ${searchTerm}`);
 
+      console.log(`${url}?${searchParams}`);
       const response = await firstValueFrom(
         this.httpService.get<PubMedESearchResponse>(`${url}?${searchParams}`)
       );
@@ -127,13 +95,7 @@ export class ScientistService {
   /**
    * Public method to search for articles and get detailed information
    */
-  async searchArticles(
-    params: SearchArticleParams & {
-      affiliation?: string;
-      keywordsArray?: string[];
-      affiliationArray?: string[];
-    }
-  ): Promise<PubMedArticle[]> {
+  async searchArticles(params: SearchArticleParams): Promise<PubMedArticle[]> {
     try {
       const articleIds = await this.searchArticleIds(params);
 
@@ -157,20 +119,28 @@ export class ScientistService {
   ): Promise<PubMedArticle[]> {
     try {
       const url = `${this.baseUrl}/efetch.fcgi`;
-      const params = new URLSearchParams({
+      /*       const params = new URLSearchParams({
         db: 'pubmed',
         id: articleIds.join(','),
         retmode: 'xml',
         rettype: 'abstract',
-      });
+      }); */
 
       this.logger.log(`Fetching details for ${articleIds.length} articles`);
 
-      const response = await firstValueFrom(
-        this.httpService.get(`${url}?${params}`, {
-          responseType: 'text',
-        })
+      console.log(
+        `${url}?db=pubmed&id=${articleIds.join(',')}&retmode=xml&rettype=abstract`
       );
+
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${url}?db=pubmed&id=${articleIds.join(',')}&retmode=xml&rettype=abstract`,
+          {
+            responseType: 'text',
+          }
+        )
+      );
+      // console.log('response', `${url}?${params}`);
 
       const xmlData = response.data;
       const articles = await this.parseXmlToArticles(xmlData);
@@ -336,11 +306,7 @@ export class ScientistService {
    * Abstract method to get authors by keywords and optionally affiliation
    */
   async searchAuthors(
-    params: SearchAuthorsParams & {
-      affiliation?: string;
-      keywordsArray?: string[];
-      affiliationArray?: string[];
-    }
+    params: SearchAuthorsParams
   ): Promise<ScientistSearchResult[]> {
     try {
       const articles = await this.searchArticles(params);
@@ -382,21 +348,19 @@ export class ScientistService {
     options: PaginationOptions
   ): Promise<PaginatedResponse<ScientistSearchResult>> {
     try {
-      const { keywords, affiliation } = params;
+      const { keywords, affiliations } = params;
       const { page, limit } = options;
       const retmax = limit;
       const retstart = (page - 1) * limit;
 
       this.logger.log(
-        `Searching scientists with keywords: ${keywords || 'none'}${affiliation ? ` and affiliation: ${affiliation}` : ''}`
+        `Searching scientists with keywords: ${keywords?.join(', ') || 'none'}${affiliations?.length ? ` and affiliations: ${affiliations.join(', ')}` : ''}`
       );
 
       // Use the Boolean operator approach for efficient server-side filtering
       const scientists = await this.searchAuthors({
-        keywords: keywords || '',
-        keywordsArray: params.keywordsArray,
-        affiliation,
-        affiliationArray: params.affiliationArray,
+        keywords,
+        affiliations,
         retmax,
         retstart,
       });

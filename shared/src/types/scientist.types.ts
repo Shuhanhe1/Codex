@@ -54,13 +54,15 @@ export interface PubMedEFetchResponse {
 
 // Search parameters
 export interface SearchArticleParams {
-  keywords: string;
+  keywords?: string[];
+  affiliations?: string[];
   retmax?: number;
   retstart?: number;
 }
 
 export interface SearchAuthorsParams {
-  keywords: string;
+  keywords?: string[];
+  affiliations?: string[];
   retmax?: number;
   retstart?: number;
 }

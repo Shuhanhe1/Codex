@@ -1,22 +1,14 @@
-import { IsString, IsOptional, IsArray, IsStringArray } from 'class-validator';
+import { IsOptional, IsArray, IsString } from 'class-validator';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 export class ScientistSearchDto extends PaginationDto {
-  @IsString()
+  @IsArray()
+  @IsString({ each: true })
   @IsOptional()
-  keywords?: string;
+  keywords?: string[];
 
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
-  keywordsArray?: string[];
-
-  @IsString()
-  @IsOptional()
-  affiliation?: string;
-
-  @IsArray()
-  @IsString({ each: true })
-  @IsOptional()
-  affiliationArray?: string[];
+  affiliations?: string[];
 }
