@@ -20,14 +20,13 @@ import {
 import { IconUsers, IconAlertCircle } from '@tabler/icons-react';
 import { ScientistSearchResult } from 'shared';
 import { MainBanner } from '../../components/common/MainBanner';
-import { ScientistSearchFilters } from '../../components/common/SearchFilters';
+import { ScientistSearchFilters } from '../../components/common/ScientistSearchFilters';
 import { scientistApiClient } from '../../lib/api/scientist.api';
+import Link from 'next/link';
 
 export default function ScientistsPage() {
   const searchParams = useSearchParams();
   const [scientists, setScientists] = useState<ScientistSearchResult[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,14 +47,15 @@ export default function ScientistsPage() {
           searchParams.affiliations = [city];
         }
 
-        const response = await scientistApiClient.searchScientists(
+        const { data } = await scientistApiClient.searchScientists(
           searchParams,
           1,
           20
         );
 
-        console.log('response', response);
-        setScientists(response.data);
+        console.log('data', data);
+
+        setScientists(data);
       } catch (err) {
         setError('Failed to search scientists. Please try again.');
         console.error('Search error:', err);
@@ -67,29 +67,16 @@ export default function ScientistsPage() {
   );
 
   const handleSearch = useCallback(
-    (query: string) => {
-      setSearchQuery(query);
-      searchScientists(query, selectedCity);
+    (filters: { searchQuery: string; selectedCity?: string | null }) => {
+      searchScientists(filters.searchQuery, filters.selectedCity || null);
     },
-    [searchScientists, selectedCity]
+    [searchScientists]
   );
-
-  const handleCityChange = (city: string | null) => {
-    setSelectedCity(city);
-    searchScientists(searchQuery, city);
-  };
 
   // Initialize from URL parameters
   useEffect(() => {
     const urlKeywords = searchParams.get('keywords');
     const urlCity = searchParams.get('affiliation');
-
-    if (urlKeywords) {
-      setSearchQuery(urlKeywords);
-    }
-    if (urlCity) {
-      setSelectedCity(urlCity);
-    }
 
     // Perform initial search if parameters exist
     if (urlKeywords || urlCity) {
@@ -111,14 +98,7 @@ export default function ScientistsPage() {
           style={{ backgroundColor: '#f8f9fa' }}
         >
           <Stack gap='md'>
-            <ScientistSearchFilters
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              onSearch={() => handleSearch(searchQuery)}
-              selectedCity={selectedCity}
-              onCityChange={handleCityChange}
-              loading={loading}
-            />
+            <ScientistSearchFilters onSubmit={handleSearch} loading={loading} />
           </Stack>
         </Card>
 
@@ -126,7 +106,6 @@ export default function ScientistsPage() {
         <Group justify='space-between'>
           <Text size='lg' fw={500}>
             {loading ? 'Searching...' : `${scientists.length} scientists found`}
-            {selectedCity && ` in ${selectedCity}`}
           </Text>
           {!loading && (
             <Group gap='xs'>
@@ -185,11 +164,6 @@ export default function ScientistsPage() {
                           .map((n) => n[0])
                           .join('')}
                       </Avatar>
-                      <Stack gap='xs' align='flex-end'>
-                        <Badge color='green' variant='light' size='sm'>
-                          Available
-                        </Badge>
-                      </Stack>
                     </Group>
 
                     {/* Basic Info */}
@@ -202,22 +176,32 @@ export default function ScientistsPage() {
                       </Text>
                       {scientist.orcid && (
                         <Group gap='xs'>
-                          <Text size='sm' c='dimmed'>
-                            ORCID: {scientist.orcid}
-                          </Text>
+                          <Link
+                            href={`https://orcid.org/${scientist.orcid}`}
+                            target='_blank'
+                          >
+                            <Badge
+                              color='green'
+                              variant='light'
+                              size='lg'
+                              style={{ cursor: 'pointer' }}
+                            >
+                              ORCID Profile: {scientist.orcid}
+                            </Badge>
+                          </Link>
                         </Group>
                       )}
                     </Stack>
 
                     {/* Action Buttons */}
-                    <Stack gap='sm'>
+                    {/*                     <Stack gap='sm'>
                       <Button fullWidth variant='outline' color='blue' disabled>
                         View Profile
                       </Button>
                       <Button fullWidth variant='filled' color='blue'>
                         Contact Scientist
                       </Button>
-                    </Stack>
+                    </Stack> */}
                   </Stack>
                 </Card>
               </GridCol>
@@ -240,12 +224,10 @@ export default function ScientistsPage() {
               <Button
                 variant='outline'
                 onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCity(null);
                   setScientists([]);
                 }}
               >
-                Clear Filters
+                Clear Results
               </Button>
             </Stack>
           </Card>

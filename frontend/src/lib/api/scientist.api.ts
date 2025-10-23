@@ -35,6 +35,7 @@ class ScientistApiClient extends ApiClient {
     const response = await this.request<
       PaginatedResponse<ScientistSearchResult>
     >(`/scientists/search?${params.toString()}`);
+
     return response.data!;
   }
 }

@@ -43,7 +43,11 @@ export class ApiClient {
         );
       }
 
-      return data;
+      return {
+        data,
+        statusCode: response.status,
+        message: response.statusText,
+      };
     } catch (error) {
       throw error;
     }

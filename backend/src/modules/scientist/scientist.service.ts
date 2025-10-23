@@ -51,19 +51,17 @@ export class ScientistService {
         // Combine keywords with affiliations using AND operator
         const keywordsTerm = `(${allKeywords.join(' OR ')})`;
         const affiliationTerm = `(${allAffiliations.map((aff) => `${aff}[AD]`).join(' OR ')})`;
-        searchTerm = `(${keywordsTerm}) AND (${affiliationTerm})`;
+        searchTerm = `(${keywordsTerm}) AND (${affiliationTerm}) AND medline[sb]`;
       } else if (allKeywords.length > 0) {
         // Just keywords search
-        searchTerm = `(${allKeywords.join(' OR ')})`;
+        searchTerm = `(${allKeywords.join(' OR ')}) AND medline[sb]`;
       } else if (allAffiliations.length > 0) {
         // Just affiliation search in author address field
-        searchTerm = `(${allAffiliations.map((aff) => `${aff}[AD]`).join(' OR ')})`;
+        searchTerm = `(${allAffiliations.map((aff) => `${aff}[AD]`).join(' OR ')}) AND medline[sb]`;
       } else {
-        // No search terms provided
-        searchTerm = '';
+        // No search terms provided - still filter to MEDLINE only
+        searchTerm = 'medline[sb]';
       }
-
-      searchTerm += '+AND+medline[sb]';
 
       const searchParams = new URLSearchParams({
         db: 'pubmed',
@@ -75,7 +73,6 @@ export class ScientistService {
 
       this.logger.log(`Searching for articles with term: ${searchTerm}`);
 
-      console.log(`${url}?${searchParams}`);
       const response = await firstValueFrom(
         this.httpService.get<PubMedESearchResponse>(`${url}?${searchParams}`)
       );
@@ -128,10 +125,6 @@ export class ScientistService {
 
       this.logger.log(`Fetching details for ${articleIds.length} articles`);
 
-      console.log(
-        `${url}?db=pubmed&id=${articleIds.join(',')}&retmode=xml&rettype=abstract`
-      );
-
       const response = await firstValueFrom(
         this.httpService.get(
           `${url}?db=pubmed&id=${articleIds.join(',')}&retmode=xml&rettype=abstract`,
@@ -140,7 +133,6 @@ export class ScientistService {
           }
         )
       );
-      // console.log('response', `${url}?${params}`);
 
       const xmlData = response.data;
       const articles = await this.parseXmlToArticles(xmlData);
@@ -329,7 +321,21 @@ export class ScientistService {
       });
 
       // Get unique scientists
-      const scientists = Array.from(scientistMap.values());
+      let scientists = Array.from(scientistMap.values());
+
+      // Filter scientists by affiliation if affiliations are specified
+      if (params.affiliations && params.affiliations.length > 0) {
+        scientists = scientists.filter((scientist) => {
+          if (!scientist.affiliation) return false;
+
+          // Check if any of the specified affiliations match the scientist's affiliation
+          return params.affiliations!.some((affiliation) =>
+            scientist.affiliation
+              .toLowerCase()
+              .includes(affiliation.toLowerCase())
+          );
+        });
+      }
 
       this.logger.log(`Found ${scientists.length} unique scientists`);
       return scientists;
@@ -350,42 +356,76 @@ export class ScientistService {
     try {
       const { keywords, affiliations } = params;
       const { page, limit } = options;
-      const retmax = limit;
-      const retstart = (page - 1) * limit;
 
       this.logger.log(
         `Searching scientists with keywords: ${keywords?.join(', ') || 'none'}${affiliations?.length ? ` and affiliations: ${affiliations.join(', ')}` : ''}`
       );
 
-      // Use the Boolean operator approach for efficient server-side filtering
-      const scientists = await this.searchAuthors({
+      // First, get a larger set of articles to extract scientists from
+      // We need more articles to get enough unique scientists for pagination
+      const articleLimit = Math.max(limit * 10, 100); // Get more articles to ensure we have enough scientists
+      const articles = await this.searchArticles({
         keywords,
         affiliations,
-        retmax,
-        retstart,
+        retmax: articleLimit,
+        retstart: 0,
       });
 
-      // Calculate total pages based on the number of results returned
-      // Note: PubMed doesn't provide total count in a single request,
-      // so we estimate based on the current page results
-      const totalPages = scientists.length === limit ? page + 1 : page;
-      const total =
-        scientists.length === limit
-          ? (page - 1) * limit + scientists.length + 1
-          : (page - 1) * limit + scientists.length;
+      // Extract all unique scientists from the articles
+      const scientistMap = new Map<string, ScientistSearchResult>();
+
+      articles.forEach((article) => {
+        article.authors.forEach((author) => {
+          const key = `${author.lastName}, ${author.foreName}`;
+
+          if (!scientistMap.has(key)) {
+            scientistMap.set(key, {
+              name: key,
+              affiliation: author.affiliation,
+              orcid: author.orcid,
+            });
+          }
+        });
+      });
+
+      // Get all unique scientists
+      let allScientists = Array.from(scientistMap.values());
+
+      // Filter scientists by affiliation if affiliations are specified
+      if (affiliations && affiliations.length > 0) {
+        allScientists = allScientists.filter((scientist) => {
+          if (!scientist.affiliation) return false;
+
+          // Check if any of the specified affiliations match the scientist's affiliation
+          return affiliations.some((affiliation) =>
+            scientist.affiliation
+              .toLowerCase()
+              .includes(affiliation.toLowerCase())
+          );
+        });
+      }
+
+      // Apply pagination to the scientists list
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedScientists = allScientists.slice(startIndex, endIndex);
+
+      // Calculate pagination metadata
+      const total = allScientists.length;
+      const totalPages = Math.ceil(total / limit);
 
       this.logger.log(
-        `Returning ${scientists.length} scientists for page ${page} (estimated total: ${total})`
+        `Found ${total} total scientists, returning ${paginatedScientists.length} for page ${page}`
       );
 
       return {
-        data: scientists,
+        data: paginatedScientists,
         pagination: {
           total,
           page,
           limit,
           totalPages,
-          hasNext: scientists.length === limit,
+          hasNext: page < totalPages,
           hasPrev: page > 1,
         },
       };
