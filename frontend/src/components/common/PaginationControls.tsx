@@ -18,7 +18,7 @@ type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 interface PaginationControlsProps {
   pagination: PaginationMeta;
   onPageChange: (page: number) => void;
-  onLimitChange: (limit: PageSize) => void;
+  onLimitChange?: (limit: PageSize) => void;
   loading?: boolean;
   showPageSizeSelector?: boolean;
   showResultsInfo?: boolean;
@@ -38,9 +38,15 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
 
   // Calculate the range of items being displayed
   const itemRange = useMemo(() => {
+    if (total === -1) {
+      // Unknown total - show current page range
+      const start = (page - 1) * limit + 1;
+      const end = page * limit;
+      return { start, end, unknown: true };
+    }
     const start = Math.min((page - 1) * limit + 1, total);
     const end = Math.min(page * limit, total);
-    return { start, end };
+    return { start, end, unknown: false };
   }, [page, limit, total]);
 
   // Validate that the current limit is one of the allowed values
@@ -53,7 +59,7 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
   const handlePageSizeChange = (value: string | null) => {
     if (value) {
       const newLimit = parseInt(value, 10) as PageSize;
-      onLimitChange(newLimit);
+      onLimitChange?.(newLimit);
     }
   };
 
@@ -63,19 +69,31 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
         {/* Results information */}
         {showResultsInfo && (
           <Text size='sm' c='dimmed'>
-            Showing{' '}
-            <Text component='span' fw={500}>
-              {itemRange.start}
-            </Text>{' '}
-            to{' '}
-            <Text component='span' fw={500}>
-              {itemRange.end}
-            </Text>{' '}
-            of{' '}
-            <Text component='span' fw={500}>
-              {total}
-            </Text>{' '}
-            results
+            {itemRange.unknown ? (
+              <>
+                Showing page{' '}
+                <Text component='span' fw={500}>
+                  {page}
+                </Text>{' '}
+                (results from limited dataset)
+              </>
+            ) : (
+              <>
+                Showing{' '}
+                <Text component='span' fw={500}>
+                  {itemRange.start}
+                </Text>{' '}
+                to{' '}
+                <Text component='span' fw={500}>
+                  {itemRange.end}
+                </Text>{' '}
+                of{' '}
+                <Text component='span' fw={500}>
+                  {total}
+                </Text>{' '}
+                results
+              </>
+            )}
           </Text>
         )}
 
@@ -107,7 +125,7 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
 
           {/* Pagination */}
           <Pagination
-            total={totalPages}
+            total={totalPages === -1 ? page + 1 : totalPages} // Show current page + 1 when total is unknown
             value={page}
             onChange={onPageChange}
             disabled={loading}

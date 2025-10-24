@@ -9,15 +9,22 @@ interface SearchFilters {
 
 interface ScientistSearchFiltersProps {
   onSubmit: (filters: SearchFilters) => void;
+  // TODO: Implement initial values
+  initialValues?: SearchFilters;
   loading?: boolean;
 }
 
 export function ScientistSearchFilters({
   onSubmit,
   loading = false,
+  initialValues,
 }: ScientistSearchFiltersProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCity, setSelectedCity] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState(
+    initialValues?.searchQuery || ''
+  );
+  const [selectedCity, setSelectedCity] = useState<string | null>(
+    initialValues?.selectedCity || null
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

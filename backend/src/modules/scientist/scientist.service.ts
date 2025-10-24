@@ -410,23 +410,25 @@ export class ScientistService {
       const endIndex = startIndex + limit;
       const paginatedScientists = allScientists.slice(startIndex, endIndex);
 
-      // Calculate pagination metadata
-      const total = allScientists.length;
-      const totalPages = Math.ceil(total / limit);
+      // Since we only have scientists from a limited set of articles,
+      // we can't know the true total count of all possible scientists
+      const hasNext =
+        paginatedScientists.length === limit && endIndex < allScientists.length;
+      const hasPrev = page > 1;
 
       this.logger.log(
-        `Found ${total} total scientists, returning ${paginatedScientists.length} for page ${page}`
+        `Found ${allScientists.length} scientists from articles, returning ${paginatedScientists.length} for page ${page}`
       );
 
       return {
         data: paginatedScientists,
         pagination: {
-          total,
+          total: -1, // -1 indicates unknown total
           page,
           limit,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1,
+          totalPages: -1, // -1 indicates unknown total pages
+          hasNext,
+          hasPrev,
         },
       };
     } catch (error) {

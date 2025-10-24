@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, usePathname } from 'next/navigation';
 import {
   Container,
   Title,
@@ -18,71 +18,174 @@ import {
   Alert,
 } from '@mantine/core';
 import { IconUsers, IconAlertCircle } from '@tabler/icons-react';
-import { ScientistSearchResult } from 'shared';
+import { PaginatedResponse, ScientistSearchResult } from 'shared';
 import { MainBanner } from '../../components/common/MainBanner';
 import { ScientistSearchFilters } from '../../components/common/ScientistSearchFilters';
+import { PaginationControls } from '../../components/common/PaginationControls';
 import { scientistApiClient } from '../../lib/api/scientist.api';
 import Link from 'next/link';
 
+const defaultLimit = 18;
+
 export default function ScientistsPage() {
   const searchParams = useSearchParams();
-  const [scientists, setScientists] = useState<ScientistSearchResult[]>([]);
+  const pathname = usePathname();
+  const [scientists, setScientists] =
+    useState<PaginatedResponse<ScientistSearchResult> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [currentSearchQuery, setCurrentSearchQuery] = useState('');
+  const [currentCity, setCurrentCity] = useState<string | null>(null);
 
-  const searchScientists = useCallback(
-    async (query: string, city: string | null = null) => {
-      setLoading(true);
-      setError(null);
+  // Function to update URL parameters
+  const updateUrlParams = (params: {
+    keywords?: string;
+    affiliation?: string | null;
+    page?: number;
+  }) => {
+    const urlParams = new URLSearchParams(searchParams.toString());
 
-      try {
-        const searchParams: { keywords?: string[]; affiliations?: string[] } =
-          {};
-
-        if (query.trim()) {
-          searchParams.keywords = [query.trim()];
-        }
-
-        if (city) {
-          searchParams.affiliations = [city];
-        }
-
-        const { data } = await scientistApiClient.searchScientists(
-          searchParams,
-          1,
-          20
-        );
-
-        console.log('data', data);
-
-        setScientists(data);
-      } catch (err) {
-        setError('Failed to search scientists. Please try again.');
-        console.error('Search error:', err);
-      } finally {
-        setLoading(false);
+    if (params.keywords !== undefined) {
+      if (params.keywords.trim()) {
+        urlParams.set('keywords', params.keywords);
+      } else {
+        urlParams.delete('keywords');
       }
-    },
-    []
-  );
+    }
 
-  const handleSearch = useCallback(
-    (filters: { searchQuery: string; selectedCity?: string | null }) => {
-      searchScientists(filters.searchQuery, filters.selectedCity || null);
-    },
-    [searchScientists]
-  );
+    if (params.affiliation !== undefined) {
+      if (params.affiliation) {
+        urlParams.set('affiliation', params.affiliation);
+      } else {
+        urlParams.delete('affiliation');
+      }
+    }
+
+    if (params.page !== undefined) {
+      urlParams.set('page', params.page.toString());
+    }
+
+    const newUrl = `${pathname}?${urlParams.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+  };
+
+  // Function to parse comma-separated keywords
+  const parseKeywords = useCallback((keywordsString: string): string[] => {
+    if (!keywordsString.trim()) return [];
+    return keywordsString.split(/[,\s]+/).filter((keyword) => keyword.trim());
+  }, []);
+
+  const searchScientists = async (params: {
+    query: string;
+    city?: string | null;
+    page?: number;
+    limit?: number;
+    updateUrl?: boolean;
+  }) => {
+    const {
+      query,
+      city = null,
+      page = currentPage,
+      limit = defaultLimit,
+      updateUrl = true,
+    } = params;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const searchParams: { keywords?: string[]; affiliations?: string[] } = {};
+
+      // Parse comma-separated keywords
+      const keywords = parseKeywords(query);
+      if (keywords.length > 0) {
+        searchParams.keywords = keywords;
+      }
+
+      if (city) {
+        searchParams.affiliations = [city];
+      }
+
+      const data = await scientistApiClient.searchScientists(
+        searchParams,
+        page,
+        limit
+      );
+
+      setScientists(data);
+
+      // Update URL parameters if requested
+      if (updateUrl) {
+        updateUrlParams({ keywords: query, affiliation: city, page });
+      }
+    } catch (err) {
+      setError('Failed to search scientists. Please try again.');
+      console.error('Search error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = (filters: {
+    searchQuery: string;
+    selectedCity?: string | null;
+  }) => {
+    setCurrentPage(1); // Reset to first page when searching
+    setCurrentSearchQuery(filters.searchQuery);
+    setCurrentCity(filters.selectedCity || null);
+    searchScientists({
+      query: filters.searchQuery,
+      city: filters.selectedCity || null,
+      page: 1,
+      limit: defaultLimit,
+      updateUrl: true,
+    });
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    searchScientists({
+      query: currentSearchQuery,
+      city: currentCity,
+      page,
+      limit: defaultLimit,
+      updateUrl: true,
+    });
+  };
 
   // Initialize from URL parameters
   useEffect(() => {
     const urlKeywords = searchParams.get('keywords');
     const urlCity = searchParams.get('affiliation');
+    const urlPage = searchParams.get('page');
+
+    // Update state from URL parameters
+    if (urlKeywords !== null) {
+      setCurrentSearchQuery(urlKeywords);
+    }
+    if (urlCity !== null) {
+      setCurrentCity(urlCity);
+    }
+    if (urlPage) {
+      const pageNum = parseInt(urlPage, 10);
+      if (!isNaN(pageNum) && pageNum > 0) {
+        setCurrentPage(pageNum);
+      }
+    }
 
     // Perform initial search if parameters exist
     if (urlKeywords || urlCity) {
-      searchScientists(urlKeywords || '', urlCity);
+      const page = urlPage ? parseInt(urlPage, 10) : 1;
+      searchScientists({
+        query: urlKeywords || '',
+        city: urlCity,
+        page,
+        limit: defaultLimit,
+        updateUrl: false, // Don't update URL since we're initializing from URL
+      });
     }
-  }, [searchParams, searchScientists]);
+  }, []);
 
   return (
     <Container size='xl' py='xl'>
@@ -98,20 +201,31 @@ export default function ScientistsPage() {
           style={{ backgroundColor: '#f8f9fa' }}
         >
           <Stack gap='md'>
-            <ScientistSearchFilters onSubmit={handleSearch} loading={loading} />
+            <ScientistSearchFilters
+              initialValues={{
+                searchQuery: currentSearchQuery,
+                selectedCity: currentCity,
+              }}
+              onSubmit={handleSearch}
+              loading={loading}
+            />
           </Stack>
         </Card>
 
         {/* Results Header */}
         <Group justify='space-between'>
           <Text size='lg' fw={500}>
-            {loading ? 'Searching...' : `${scientists.length} scientists found`}
+            {loading
+              ? 'Searching...'
+              : scientists?.pagination.total === -1
+                ? 'Scientists found (limited dataset)'
+                : `${scientists?.pagination.total || 0} scientists found`}
           </Text>
-          {!loading && (
+          {!loading && scientists?.pagination.total !== -1 && (
             <Group gap='xs'>
               <IconUsers size={16} />
               <Text size='sm' c='dimmed'>
-                {scientists.length} results
+                {scientists?.pagination.total} results
               </Text>
             </Group>
           )}
@@ -139,9 +253,9 @@ export default function ScientistsPage() {
         )}
 
         {/* Scientists Grid */}
-        {!loading && (
+        {!loading && scientists && scientists.data.length > 0 && (
           <Grid>
-            {scientists.map((scientist, index) => (
+            {scientists.data.map((scientist, index) => (
               <GridCol
                 key={`${scientist.name}-${index}`}
                 span={{ base: 12, sm: 6, lg: 4 }}
@@ -209,8 +323,20 @@ export default function ScientistsPage() {
           </Grid>
         )}
 
+        {/* Pagination Controls */}
+        {!loading && scientists && scientists.data.length > 0 && (
+          <PaginationControls
+            pagination={scientists.pagination}
+            onPageChange={handlePageChange}
+            loading={loading}
+            showPageSizeSelector={false}
+            showResultsInfo={true}
+            maxVisiblePages={5}
+          />
+        )}
+
         {/* No Results */}
-        {!loading && scientists.length === 0 && !error && (
+        {!loading && scientists?.data.length === 0 && !error && (
           <Card p='xl' shadow='sm' radius='md' style={{ textAlign: 'center' }}>
             <Stack gap='md' align='center'>
               <IconUsers size={48} color='#868e96' />
@@ -224,7 +350,7 @@ export default function ScientistsPage() {
               <Button
                 variant='outline'
                 onClick={() => {
-                  setScientists([]);
+                  setScientists(null);
                 }}
               >
                 Clear Results
